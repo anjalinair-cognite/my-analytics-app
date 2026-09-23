@@ -1,0 +1,17 @@
+{
+  "name": "My Analytics App",
+  "description": "Analytics dashboard",
+  "externalId": "my-analytics-app",
+  "versionTag": "0.0.1",
+  "infra": "appsApi",
+  "deployments": [
+    {
+      "org": "publicdata",
+      "project": "publicdatacdm",
+      "baseUrl": "https://api.cognitedata.com",
+      "published": false,
+      "deployClientId": "",
+      "deploySecretName": "PUBLICDATA_PUBLICDATACDM_API"
+    }
+  ]
+}
