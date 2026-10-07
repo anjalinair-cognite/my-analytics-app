@@ -10,8 +10,21 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, '.claude/**', '.agents/**'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html', 'lcov'],
-      exclude: ['node_modules/', 'dist/', '.claude/', '.agents/', 'vitest.setup.ts', '**/*.config.ts', '**/*.d.ts'],
+      reporter: ['text', 'json', 'html', 'lcov', 'text-summary'],
+      all: true,
+      thresholds: { lines: 80 },
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        'src/**/*.spec.{ts,tsx}',
+        'src/**/vite-env.d.ts',
+        'src/main.tsx',
+        'src/__mocks__/**',
+        // Vendored PDF viewer: importing it loads pdf.js and OOMs happy-dom.
+        'src/cognite-file-viewer/CogniteFileViewer.tsx',
+        'src/cognite-file-viewer/useViewport.ts',
+        'src/asset360/DefaultFileViewer.tsx',
+      ],
     },
   },
 });
