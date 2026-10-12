@@ -1,5 +1,8 @@
 import { useEffect, type ReactNode } from 'react';
 
+// Test-only react-pdf stub (Vitest alias). Mixed component + pdfjs exports
+// are required to match the real module surface; this file is not in the app bundle.
+
 export const pdfjs = {
   GlobalWorkerOptions: { workerSrc: '' },
   version: '9.2.1',
