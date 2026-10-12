@@ -1,8 +1,16 @@
+import path from 'node:path';
+
 import react from '@vitejs/plugin-react';
 import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // Lightweight stubs so viewer tests execute production branches without loading pdf.js.
+      'react-pdf': path.resolve(__dirname, 'src/__mocks__/reactPdf.tsx'),
+    },
+  },
   test: {
     globals: true,
     environment: 'happy-dom',
@@ -20,10 +28,6 @@ export default defineConfig({
         'src/**/vite-env.d.ts',
         'src/main.tsx',
         'src/__mocks__/**',
-        // Vendored PDF viewer: importing it loads pdf.js and OOMs happy-dom.
-        'src/cognite-file-viewer/CogniteFileViewer.tsx',
-        'src/cognite-file-viewer/useViewport.ts',
-        'src/asset360/DefaultFileViewer.tsx',
       ],
     },
   },

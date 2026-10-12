@@ -1,4 +1,4 @@
-import { CogniteFileViewer } from '../cognite-file-viewer';
+import { CogniteFileViewer } from '../cognite-file-viewer/CogniteFileViewer';
 
 import type { FileViewerRenderProps } from './asset360ViewModelContext';
 import { FilePreviewSkeleton } from './skeletons';

@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 import { defaultAsset360ViewModelContext } from './asset360/asset360ViewModelContext';
 import { DefaultFileViewer } from './asset360/DefaultFileViewer';
+import './cognite-file-viewer/pdfWorker';
 import { shouldRetryQuery } from './shared/utils/throttleRetry';
 
 import './styles.css';
