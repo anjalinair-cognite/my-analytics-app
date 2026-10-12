@@ -14,13 +14,18 @@ export default defineConfig({
   // manifestCspPlugin() must stay first — its middleware sets the
   // Content-Security-Policy header before any HTML response is sent.
   plugins: [manifestCspPlugin(), react(), mkcertPlugin(), fusionOpenPlugin(), tailwindcss()],
+  optimizeDeps: {
+    exclude: ['pdfjs-dist'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
   server: {
+    host: true,
     port: 3001,
+    strictPort: true,
   },
   worker: {
     format: 'es',

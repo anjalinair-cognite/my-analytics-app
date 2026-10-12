@@ -1,11 +1,20 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HostAppAPI, ConnectToHostAppResult } from '@cognite/app-sdk';
+import type { ConnectToHostAppResult, HostAppAPI } from '@cognite/app-sdk';
 import { CogniteClient } from '@cognite/sdk';
-import type { ComponentProps } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps, ReactElement } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  createTestQueryClient,
+  makeDatapointService,
+  makeInstanceService,
+  makeRelatedService,
+  makeSearchService,
+} from './__mocks__/asset360Harness';
 import App from './App';
+import { defaultAsset360ViewModelContext } from './asset360/asset360ViewModelContext';
+import type { Identity, SearchHit } from './cdm/types';
 
 type AppDeps = NonNullable<ComponentProps<typeof App>['deps']>;
 
@@ -17,8 +26,8 @@ function makeApi(): AppApi {
   };
 }
 
-function makeConnectedFn(api: AppApi = makeApi()) {
-  return vi.fn(() => Promise.resolve({ api }));
+function makeConnectedFn(api: AppApi = makeApi(), initialState?: string) {
+  return vi.fn(() => Promise.resolve({ api, initialState }));
 }
 
 function makeDeps(): AppDeps {
@@ -44,57 +53,99 @@ function makeLoadingDeps(): AppDeps {
   };
 }
 
+const hit: SearchHit = {
+  space: 'plant',
+  externalId: 'pump-101',
+  kind: 'equipment',
+  name: 'PUMP-101',
+  description: 'Feed pump',
+};
+
+const identity: Identity = {
+  ...hit,
+  parent: null,
+  asset: { space: 'plant', externalId: 'loc-1', name: 'Area 12' },
+  manufacturer: 'Acme',
+  serialNumber: 'SN-1',
+};
+
+function renderApp(ui: ReactElement) {
+  return render(<QueryClientProvider client={createTestQueryClient()}>{ui}</QueryClientProvider>);
+}
+
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders loading state', () => {
-    render(<App deps={makeLoadingDeps()} connectToHostApp={() => new Promise<never>(() => undefined)} />);
+    renderApp(<App deps={makeLoadingDeps()} connectToHostApp={() => new Promise<never>(() => undefined)} />);
     expect(screen.getByText('Loading project...')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading project' })).toBeInTheDocument();
   });
 
-  it('renders splash with deployment targets and checklist copy', async () => {
-    render(<App deps={makeDeps()} connectToHostApp={makeConnectedFn()} />);
-    await waitFor(() => expect(screen.getByText('Welcome to Flows custom apps')).toBeInTheDocument());
-    expect(screen.getByText('App deployment checklist')).toBeInTheDocument();
-    expect(screen.getByText('Plan')).toBeInTheDocument();
-    expect(screen.getByText('Explore')).toBeInTheDocument();
-    expect(screen.getByText('Deploy')).toBeInTheDocument();
-    expect(screen.getByText('Support')).toBeInTheDocument();
-    expect(screen.getByText('Help & feedback')).toBeInTheDocument();
-    expect(screen.getByText('Your app will deploy to')).toBeInTheDocument();
-    expect(screen.getByText('org')).toBeInTheDocument();
-    expect(screen.getByText('and project')).toBeInTheDocument();
-    expect(screen.getByText('publicdata')).toBeInTheDocument();
-    expect(screen.getByText('publicdatacdm')).toBeInTheDocument();
-    expect(screen.getAllByText(/SPEC\.md/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/apps deploy --interactive/)).toBeInTheDocument();
-  });
+  it('restores search query and selected instance from host state', async () => {
+    const searchService = makeSearchService({ search: vi.fn(async () => [hit]) });
+    const instanceService = makeInstanceService({ loadIdentity: vi.fn(async () => identity) });
+    const relatedService = makeRelatedService();
+    const datapointService = makeDatapointService();
 
-  it('syncs internal state when the open step changes', async () => {
-    const api = makeApi();
-    render(<App deps={makeDeps()} connectToHostApp={makeConnectedFn(api)} />);
-    await waitFor(() => expect(screen.getByText('App deployment checklist')).toBeInTheDocument());
-
-    await userEvent.click(screen.getByText('Explore'));
-
-    expect(api.syncInternalState).toHaveBeenCalledWith(
-      JSON.stringify({ openStep: 'Explore' })
+    renderApp(
+      <App
+        deps={makeDeps()}
+        connectToHostApp={makeConnectedFn(
+          makeApi(),
+          JSON.stringify({
+            searchQuery: 'PUMP-101',
+            selected: { space: 'plant', externalId: 'pump-101', kind: 'equipment' },
+          })
+        )}
+        viewModelContext={{
+          ...defaultAsset360ViewModelContext,
+          createSearchService: () => searchService,
+          createInstanceService: () => instanceService,
+          createRelatedService: () => relatedService,
+          createDatapointService: () => datapointService,
+          useCogniteSdk: () => ({ project: 'publicdatacdm' }) as never,
+          renderFileViewer: ({ externalId }) => <div>File preview {externalId}</div>,
+        }}
+      />
     );
+
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveTextContent('PUMP-101'));
+    await waitFor(() => expect(screen.getByText('Acme')).toBeInTheDocument());
+    expect(screen.getAllByText('Feed pump').length).toBeGreaterThan(0);
   });
 
-  it('restores the open step from initial state', async () => {
-    const api = makeApi();
-    render(<App
-      deps={makeDeps()}
-      connectToHostApp={() => Promise.resolve({ api, initialState: JSON.stringify({ openStep: 'Deploy' }) })}
-    />);
-    await waitFor(() => expect(screen.getByText('App deployment checklist')).toBeInTheDocument());
-
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /deploy/i })).toHaveAttribute('aria-expanded', 'true')
+  it('shows the host-connect error when connectToHostApp rejects', async () => {
+    renderApp(
+      <App
+        deps={makeDeps()}
+        connectToHostApp={() => Promise.reject(new Error('host down'))}
+      />
     );
-    expect(screen.getByRole('button', { name: /plan/i })).toHaveAttribute('aria-expanded', 'false');
+
+    await waitFor(() => expect(screen.getByText('Failed to connect to Fusion host')).toBeInTheDocument());
+  });
+
+  it('shows an error fallback when a render error occurs', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    renderApp(
+      <App
+        deps={makeDeps()}
+        connectToHostApp={makeConnectedFn()}
+        viewModelContext={{
+          ...defaultAsset360ViewModelContext,
+          useAppState: () => {
+            throw new Error('Identity panel crashed');
+          },
+          useCogniteSdk: () => ({ project: 'publicdatacdm' }) as never,
+        }}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Identity panel crashed'));
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
   });
 });

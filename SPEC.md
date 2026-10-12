@@ -31,8 +31,8 @@ Living product spec for the Flows app **My Analytics App** (`my-analytics-app`).
 
 ### Acceptance Scenarios
 
-- **Given** the analyst is signed into Fusion on project `publicdatacdm`, **when** they open My Analytics App, **then** they see a search field and can search CDM assets/equipment without leaving the app.
-- **Given** search results are listed, **when** they select one instance, **then** the same page shows that instance’s identity, related time series, related activities, and related files (or explicit empty states if a relation has no data).
+- **Given** the analyst is signed into Fusion on project `publicdatacdm`, **when** they open My Analytics App, **then** they see an Aura combobox and can type-ahead search CDM assets/equipment without leaving the app.
+- **Given** search results are listed, **when** they select one instance, **then** the same page shows that instance’s identity and Aura tabs for related time series, work orders, and documents (or an explicit empty state in the active tab if that relation has no data).
 - **Given** at least one related numeric time series exists, **when** they view the selected instance, **then** they can see a chart of recent datapoints for a series without opening another CDF app.
 - **Given** at least one related uploaded file exists, **when** they choose that file, **then** they can preview or open it from the same page.
 - **Given** CDF returns an error or the instance has no related series/files/activities, **when** the page renders, **then** they see a clear error or empty message — not a blank or broken layout.
@@ -44,23 +44,23 @@ Living product spec for the Flows app **My Analytics App** (`my-analytics-app`).
 
 ### Functional Requirements
 
-- **FR-001:** The app MUST let the user search CDM instances by name, alias, or external id using the Instances **search** API against `cdf_cdm.CogniteAsset:v1` and `cdf_cdm.CogniteEquipment:v1` (search-first, then hydrate — not a full graph scan).
+- **FR-001:** The app MUST let the user type-ahead search CDM instances by name, alias, or external id using an Aura combobox backed by the Instances **search** API against `cdf_cdm.CogniteAsset:v1` and `cdf_cdm.CogniteEquipment:v1` (search-first, ranked results as the user types — not a full graph scan).
 - **FR-002:** After selection, the app MUST show identity fields from CDM describable/sourceable properties: `name`, `description`, `externalId`, `space`, and (for assets) `parent` when present.
-- **FR-003:** The app MUST list time series related to the selected asset or equipment (`CogniteTimeSeries` linked via `assets` / `equipment`) and MUST chart recent **datapoints** through the Time Series API (not the Instances API).
-- **FR-004:** The app MUST list related maintenance-style records as `cdf_cdm.CogniteActivity:v1` (start/end, name, description, status-like source fields when present). This is the v1 stand-in for SAP work orders on a CDM-only project.
-- **FR-005:** The app MUST list related `cdf_cdm.CogniteFile:v1` instances and MUST allow the user to open/preview an uploaded file (P&ID, manual, datasheet) from the same page via the File content API.
+- **FR-003:** The app MUST list time series related to the selected asset or equipment (`CogniteTimeSeries` linked via `assets` / `equipment`) and MUST chart recent **datapoints** through the Time Series API (not the Instances API). Related lists are capped at 100 items; if more exist the panel MUST say the list was truncated.
+- **FR-004:** The app MUST list related maintenance-style records as `cdf_cdm.CogniteActivity:v1` (`name`, `description`, `startTime`, `endTime`) in an Aura Data grid. This is the v1 stand-in for SAP work orders on a CDM-only project. Activity has **no `status` field** (that exists on Process Industries `CogniteMaintenanceOrder`). Lists are capped at 100 items with a visible truncation notice.
+- **FR-005:** The app MUST list related `cdf_cdm.CogniteFile:v1` instances in an Aura Data grid and MUST allow the user to open/preview an uploaded file (P&ID, manual, datasheet) from the same page via the File content API. Lists are capped at 100 items with a visible truncation notice.
 - **FR-006:** The app MUST read industrial data only through **data modeling instances** (CDM views). It MUST NOT use legacy `/assets`, `/files` list-by-internal-id, or `/timeseries` metadata endpoints as the primary model (datapoints and file bytes still use their dedicated APIs keyed by instance `space` + `externalId`).
-- **FR-007:** Selected instance `{ space, externalId }`, search query, and chart time range MUST be host-synced (`syncInternalState` / `initialState`) so reload and shared links restore the view.
-- **FR-008:** Loading, empty, and error states MUST be visible for search, instance header, time series, activities, and files independently (one missing relation must not hide the others).
+- **FR-007:** Selected instance `{ space, externalId }`, search query, related tab, and chart time range MUST be host-synced (`syncInternalState` / `initialState`) so reload and shared links restore the view.
+- **FR-008:** Loading, empty, and error states MUST be visible for search, instance header, time series, activities, and files independently (one missing relation must not hide the others). Loading MUST use Aura skeletons that match the pending layout; empty MUST use Aura empty states.
 - **FR-009:** The app is **read-only**. It MUST NOT create, update, or delete CDM instances, datapoints, or files.
-- **FR-010:** UI MUST use Aura primitives (search, table/list, chart container, alerts, loaders). Target device is desktop / large monitor in an office (occasionally control room).
+- **FR-010:** UI MUST use Aura primitives (combobox for type-ahead search, tabs for related panels, Data grid for work orders and documents, buttons, badges/chips, chart container, alerts, empty states, and loading skeletons). Interactive controls MUST use Aura variants rather than custom restyling. Target device is desktop / large monitor in an office (occasionally control room).
 - **FR-011:** Users need CDM read access as documented: `dataModelsAcl.READ` on `cdf_cdm`, `dataModelInstancesAcl.READ` on the instance spaces that hold publicdatacdm nodes, plus time-series datapoint read and file-content read for charts and previews.
 
 ### Query approach (implementation contract)
 
 1. **Discover:** `instances.search` on Asset and Equipment views (user is matching a tag).
 2. **Hydrate:** `instances.query` from the selected node along **single** direct relations (for example Equipment → `asset`, Asset → `parent`).
-3. **Reverse list relations:** Asset `timeSeries`, `files`, and `activities` are reverse relations through **list** properties on the related views. If `/query` reverse traversal is not valid for that list property, use `instances.search` / `list` with a `containsAny` (or equivalent) filter on `CogniteTimeSeries.assets`, `CogniteFile`’s asset relation, and `CogniteActivity.assets` / `.equipment`. Confirm against the live view schema in `publicdatacdm`.
+3. **Reverse list relations:** Asset `timeSeries`, `files`, and `activities` are reverse relations through **list** properties on the related views. If `/query` reverse traversal is not valid for that list property, use `instances.search` / `list` with a `containsAny` (or equivalent) filter on `CogniteTimeSeries.assets`, `CogniteFile`’s asset relation, and `CogniteActivity.assets` / `.equipment`. Confirm against the live view schema in `publicdatacdm`. Each reverse list requests at most 100 items. If CDF returns `nextCursor` or a full page, the UI shows that the list was truncated instead of fetching further pages.
 4. **Datapoints:** Time Series API using the time series instance id (`space` + `externalId`). Default window: last 24 hours; user can change range (host-synced).
 5. **File bytes:** File content API (or CogniteFileViewer) using the file instance id. Do not assume classic numeric file ids.
 
@@ -72,14 +72,14 @@ Living product spec for the Flows app **My Analytics App** (`my-analytics-app`).
 - **SC-002:** Completing that path does not require opening 3–4 siloed apps (SAP, historian, SharePoint, Excel).
 - **SC-003:** Investigation for a flagged tag drops from **hours to minutes** for the happy path (search → select → chart + file), measured qualitatively in demo; target under 10 minutes.
 - **SC-004:** Empty and error states are understandable without console inspection (no silent failure).
-- **SC-005:** Reload and shared Fusion links restore the same search query and selected instance.
+- **SC-005:** Reload and shared Fusion links restore the same search query, selected instance, and related tab.
 
 ---
 
 ## Clarifications
 
 - **Work orders vs activities:** SAP-style **maintenance orders** are modeled in CDM as `CogniteActivity` and specialized in Process Industries as `cdf_idm.CogniteMaintenanceOrder:v1`. v1 of this app reads **CogniteActivity** only so it runs on CogniteCore in `publicdatacdm`. If that project later has populated IDM maintenance orders, a follow-up may add `CogniteMaintenanceOrder` without changing the UX contract (“recent work orders”).
-- **CogniteFile asset relation name:** The [core model table](https://docs.cognite.com/cdf/dm/dm_reference/dm_core_data_model#file) lists property `asset`; the [files guide](https://docs.cognite.com/cdf/dm/dm_guides/dm_integrate_files) says `assets`. Implementation MUST read the live `cdf_cdm.CogniteFile:v1` view in `publicdatacdm` and use the actual property identifier.
+- **CogniteFile asset relation name:** The CogniteFile view property is **`assets`** (list of asset relations). Reverse lookup uses `containsAny` on `CogniteFile.assets`. Equipment-linked files are also read from the forward `CogniteEquipment.files` list.
 - **Search scope:** Default search covers Asset and Equipment. If a tag exists only as a time series name, v1 does not require finding it until the user selects a parent asset/equipment.
 - **Chart series:** If several series are linked, default to the first numeric series; user can pick another (selection host-synced).
 - **P&ID overlay:** v1 opens the file; it does **not** require rendering `CogniteDiagramAnnotation` bounding boxes. Annotations remain an optional enhancement.
@@ -158,7 +158,7 @@ CogniteEquipment.asset ──► CogniteAsset
 CogniteAsset.parent    ──► CogniteAsset (hierarchy)
 CogniteTimeSeries.assets / .equipment ──► Asset / Equipment
 CogniteActivity.assets / .equipment   ──► Asset / Equipment
-CogniteFile ──► Asset (property name: verify live view)
+CogniteFile.assets ──► CogniteAsset
 CogniteEquipment.files ──► CogniteFile
 ```
 
